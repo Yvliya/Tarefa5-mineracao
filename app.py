@@ -3,17 +3,16 @@ import pandas as pd
 import plotly.express as px
 import numpy as np
 
-PUBLIC_DATA_URL = 'https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-01-21/spotify_songs.csv'
+st.set_page_config(page_title="Dashboard Spotify", page_icon="🎵", layout="wide")
+
+st.title("Dashboard Spotify (1921–2020)")
+st.markdown("Explore músicas do Spotify entre 1921 e 2020. Utilize os filtros à esquerda para refinar sua análise.")
+
+PUBLIC_DATA_URL = "https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-01-21/spotify_songs.csv"
 
 @st.cache_data
 def load_data(url):
-    try:
-        df = pd.read_csv(url)
-    except Exception as e:
-        st.error(f"Erro ao carregar os dados da URL: {e}. Verifique sua conexão ou a URL do dataset.")
-        st.stop()
-    
-    # Renomeando colunas para padronizar
+    df = pd.read_csv(url)
     column_rename_map = {}
     if 'track_name' in df.columns:
         column_rename_map['track_name'] = 'name'
@@ -21,62 +20,63 @@ def load_data(url):
         column_rename_map['track_artist'] = 'artists'
     df = df.rename(columns=column_rename_map)
 
-    # Criando coluna 'year'
     if 'track_album_release_date' in df.columns:
-        df['year'] = df['track_album_release_date'].astype(str).str.split('-').str[0]
-        df['year'] = pd.to_numeric(df['year'], errors='coerce')
+        df['year'] = df['track_album_release_date'].str.split('-').str[0].astype(int)
     else:
         df['year'] = np.nan
 
-    # Colunas obrigatórias que vamos precisar
     required_cols = ['artists', 'name', 'popularity', 'year']
-
-    # Garante que só usamos colunas que realmente existem
-    existing_cols = [col for col in required_cols if col in df.columns]
-
-    if existing_cols:
-        df = df.dropna(subset=existing_cols)
-    else:
-        st.warning("Nenhuma das colunas obrigatórias foi encontrada no dataset!")
-
-    # Tratamento da coluna 'year'
-    if 'year' in df.columns:
-        df = df[df['year'].notna()]
-        df['year'] = df['year'].astype(int, errors='ignore')
-        df = df[(df['year'] >= 1921) & (df['year'] <= 2020)]
-        df['decade'] = (df['year'] // 10) * 10
-        df['decade'] = df['decade'].astype(str) + 's'
-    else:
-        df['decade'] = "Desconhecida"
-
+    df = df.dropna(subset=[col for col in required_cols if col in df.columns])
+    df['year'] = df['year'].astype(int)
+    df = df[(df['year'] >= 1921) & (df['year'] <= 2020)]
+    df['decade'] = (df['year'] // 10) * 10
+    df['decade'] = df['decade'].astype(str) + 's'
     return df
 
+df = load_data(PUBLIC_DATA_URL)
 
-# ---------------------------
-# APP STREAMLIT
-# ---------------------------
+st.sidebar.header("Filtros")
+anos_disponiveis = sorted(df['year'].unique())
+anos_selecionados = st.sidebar.slider("Ano de lançamento", int(df['year'].min()), int(df['year'].max()), (1990, 2020))
+artistas_disponiveis = sorted(df['artists'].unique())
+artistas_selecionados = st.sidebar.multiselect("Artistas", artistas_disponiveis)
 
-df_original = load_data(PUBLIC_DATA_URL)
+df_filtrado = df[(df['year'] >= anos_selecionados[0]) & (df['year'] <= anos_selecionados[1])]
+if artistas_selecionados:
+    df_filtrado = df_filtrado[df_filtrado['artists'].isin(artistas_selecionados)]
 
-st.set_page_config(
-    page_title="Dashboard Spotify (1921-2020)", 
-    page_icon="🎵", 
-    layout="wide"
-)
+st.subheader("Métricas Principais")
+col1, col2, col3 = st.columns(3)
+col1.metric("Total de músicas", df_filtrado.shape[0])
+if not df_filtrado.empty:
+    col2.metric("Artista mais frequente", df_filtrado["artists"].mode()[0])
+    col3.metric("Média de popularidade", round(df_filtrado["popularity"].mean(), 2))
+else:
+    col2.metric("Artista mais frequente", "N/A")
+    col3.metric("Média de popularidade", "0")
 
-st.title("🎵 Análise de Músicas do Spotify (1921-2020)")
+st.subheader("Gráficos")
+col_graf1, col_graf2 = st.columns(2)
 
-st.markdown("""
-Este painel interativo permite explorar tendências e métricas-chave (KPIs) de faixas 
-musicais, abrangendo um século de história da música. **(Versão de Produção)**.  
-Use os filtros laterais para personalizar sua análise.
-""")
+with col_graf1:
+    if not df_filtrado.empty:
+        top_artistas = df_filtrado['artists'].value_counts().head(10).reset_index()
+        top_artistas.columns = ['Artista', 'Quantidade']
+        grafico_artistas = px.bar(top_artistas, x='Artista', y='Quantidade', title="Top 10 artistas com mais músicas")
+        grafico_artistas.update_layout(title_x=0.5, yaxis={'categoryorder':'total ascending'})
+        st.plotly_chart(grafico_artistas, use_container_width=True)
+    else:
+        st.warning("Nenhum dado para exibir no gráfico de artistas.")
 
-st.markdown("---")
+with col_graf2:
+    if not df_filtrado.empty:
+        decade_counts = df_filtrado['decade'].value_counts().reset_index()
+        decade_counts.columns = ['Década', 'Quantidade']
+        grafico_decada = px.pie(decade_counts, values='Quantidade', names='Década', title="Distribuição das músicas por década")
+        grafico_decada.update_layout(title_x=0.5)
+        st.plotly_chart(grafico_decada, use_container_width=True)
+    else:
+        st.warning("Nenhum dado para exibir no gráfico de décadas.")
 
-st.sidebar.header("Filtros de Dados")
-
-if df_original is not None:
-    df_filtered = df_original.copy()
-
-    min_year = int(df_original['year'].min())
+st.subheader("Tabela de Dados")
+st.dataframe(df_filtrado)
