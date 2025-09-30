@@ -12,7 +12,12 @@ PUBLIC_DATA_URL = "https://raw.githubusercontent.com/rfordatascience/tidytuesday
 
 @st.cache_data
 def load_data(url):
-    df = pd.read_csv(url)
+    try:
+        df = pd.read_csv(url)
+    except Exception as e:
+        st.error(f"Erro ao carregar os dados da URL: {e}")
+        st.stop()
+
     column_rename_map = {}
     if 'track_name' in df.columns:
         column_rename_map['track_name'] = 'name'
@@ -48,18 +53,19 @@ if artistas_selecionados:
 st.subheader("Métricas Principais")
 col1, col2, col3 = st.columns(3)
 col1.metric("Total de músicas", df_filtrado.shape[0])
+
 if not df_filtrado.empty:
-    col2.metric("Artista mais frequente", df_filtrado["artists"].mode()[0])
-    col3.metric("Média de popularidade", round(df_filtrado["popularity"].mean(), 2))
+    col2.metric("Artista mais frequente", df_filtrado["artists"].mode()[0] if "artists" in df_filtrado.columns else "N/A")
+    col3.metric("Média de popularidade", round(df_filtrado["popularity"].mean(), 2) if "popularity" in df_filtrado.columns else "N/A")
 else:
     col2.metric("Artista mais frequente", "N/A")
-    col3.metric("Média de popularidade", "0")
+    col3.metric("Média de popularidade", "N/A")
 
 st.subheader("Gráficos")
 col_graf1, col_graf2 = st.columns(2)
 
 with col_graf1:
-    if not df_filtrado.empty:
+    if not df_filtrado.empty and "artists" in df_filtrado.columns:
         top_artistas = df_filtrado['artists'].value_counts().head(10).reset_index()
         top_artistas.columns = ['Artista', 'Quantidade']
         grafico_artistas = px.bar(top_artistas, x='Artista', y='Quantidade', title="Top 10 artistas com mais músicas")
@@ -69,7 +75,7 @@ with col_graf1:
         st.warning("Nenhum dado para exibir no gráfico de artistas.")
 
 with col_graf2:
-    if not df_filtrado.empty:
+    if not df_filtrado.empty and "decade" in df_filtrado.columns:
         decade_counts = df_filtrado['decade'].value_counts().reset_index()
         decade_counts.columns = ['Década', 'Quantidade']
         grafico_decada = px.pie(decade_counts, values='Quantidade', names='Década', title="Distribuição das músicas por década")
