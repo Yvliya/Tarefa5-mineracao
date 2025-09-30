@@ -13,17 +13,26 @@ def load_data(url):
         st.error(f"Erro ao carregar os dados da URL: {e}. Verifique sua conexão ou a URL do dataset.")
         st.stop()
     
+   
+    column_rename_map = {}
+    if 'track_name' in df.columns:
+        column_rename_map['track_name'] = 'name'
+    if 'track_artist' in df.columns:
+        column_rename_map['track_artist'] = 'artists'
+        
+    df = df.rename(columns=column_rename_map)
+
     if 'track_album_release_date' in df.columns:
         df['year'] = df['track_album_release_date'].str.split('-').str[0].astype(int)
-    
-    if 'track_name' in df.columns:
-        df = df.rename(columns={'track_name': 'name'})
-    if 'track_artist' in df.columns:
-        df = df.rename(columns={'track_artist': 'artists'})
-
+    else:
+      
+        df['year'] = np.nan
+        
     required_cols = ['artists', 'name', 'popularity', 'year']
+    
     df = df.dropna(subset=required_cols)
     
+
     df['year'] = df['year'].astype(int)
     df = df[(df['year'] >= 1921) & (df['year'] <= 2020)]
 
